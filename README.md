@@ -42,6 +42,7 @@
 - ∞ Infinite wallet generating! (set number to 0 to active infinite loop) ∞
 - Generate word seed phrase with BIP-39 mnemonic (support 12, 24 Word Seed Phrase) (Default is 128 bits for 12 words).
 - Embedded Database Supported! (with SQLite3). It's easiest to generate, manage, search a billion wallets without any pain.
+- 🔐 **Encrypted Export** - Automatically export wallets to password-encrypted JSON files for secure sharing
 - Tiny Sizes and Superior Speed with Golang 🚀 (required go 1.21 or higher)
 - No Go? No Problem! [Docker images 🐳](https://hub.docker.com/r/planxthanee/ethereum-wallet-generator) or [exec files](https://github.com/Planxnx/ethereum-wallet-generator/releases/latest) are provided for you
 - You can benchmark generating speed by setting the `isDryrun` flag 📈
@@ -104,6 +105,7 @@ Usage of ethereum-wallet-generator:
   -regex      string show only result that was matched with given regex (eg. ^0x99 or ^0x00)
   -dryrun     bool   generate wallet without a result (used for benchmark speed)
   -compatible bool   logging compatible mode (turn this on to fix logging glitch)
+  -decrypt    string decrypt encrypted JSON file (e.g., output/wallets.encrypted.json)
 ```
 
 ## Benchmark
@@ -264,6 +266,37 @@ Total Duration: 10.9545307s
 Total Wallet Resolved: 50000 w
 
 ```
+
+### **🔐 Encrypted Export & Decrypt:**
+
+When using in-memory mode (without `-db` flag), wallets are automatically exported to an encrypted JSON file after generation:
+
+```console
+$ ethereum-wallet-generator -n 10
+===============ETH Wallet Generator===============
+
+10 / 10 | [██████████████████████████████████████████████████████████████████████████████████████████] | 100.00% | 503 p/s | resovled: 10
+
+Enter password to encrypt wallets: [password hidden]
+Successfully exported 10 wallets to output/wallets.encrypted.json
+```
+
+Decrypt the encrypted file:
+
+```console
+$ ethereum-wallet-generator -decrypt output/wallets.encrypted.json
+Enter password to decrypt: [password hidden]
+Successfully decrypted 10 wallets to output/wallets.json
+```
+
+**Security Features:**
+- AES-256-GCM encryption with PBKDF2 key derivation (100,000 iterations)
+- Password input is hidden (not visible in terminal)
+- All encrypted/decrypted files are saved to `output/` directory
+- Memory is cleared after encryption
+- Output directory is automatically added to `.gitignore`
+- **Addresses are visible in plain text** for easy identification of which wallets you have
+- Only `privateKey` and `mnemonic` fields are encrypted (indicated by `hasPrivateKey` and `hasMnemonic` flags)
 
 ## Thanks to
 
