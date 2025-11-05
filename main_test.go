@@ -19,7 +19,7 @@ func TestEndToEndEncryptionFlow(t *testing.T) {
 
 	// Step 1: Create wallets (simulating generation)
 	repo := repository.NewInMemoryRepository().(*repository.InMemoryRepository)
-	
+
 	testWallets := []*wallets.Wallet{
 		{
 			Address:    "0x1111111111111111111111111111111111111111",
@@ -308,4 +308,3 @@ func decryptWalletsForTesting(encryptedWallets []repository.EncryptedWallet, pas
 
 	return decryptedWallets, nil
 }
-

@@ -409,4 +409,3 @@ func decryptWalletsForTesting(encryptedWallets []EncryptedWallet, password strin
 
 	return decryptedWallets, nil
 }
-

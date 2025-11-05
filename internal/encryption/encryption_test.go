@@ -181,4 +181,3 @@ func TestEncryptSpecialCharacters(t *testing.T) {
 		t.Error("Special characters not preserved")
 	}
 }
-
