@@ -295,6 +295,8 @@ Successfully decrypted 10 wallets to output/wallets.json
 - All encrypted/decrypted files are saved to `output/` directory
 - Memory is cleared after encryption
 - Output directory is automatically added to `.gitignore`
+- **Addresses are visible in plain text** for easy identification of which wallets you have
+- Only `privateKey` and `mnemonic` fields are encrypted (indicated by `hasPrivateKey` and `hasMnemonic` flags)
 
 ## Thanks to
 

@@ -83,22 +83,54 @@ func main() {
 			log.Fatal("Error: password cannot be empty")
 		}
 
-		// Decrypt
-		decrypted, err := encryption.Decrypt(string(encryptedData), string(password))
-		if err != nil {
-			log.Fatalf("Error decrypting file: %v", err)
+		// Parse JSON (file is not fully encrypted, only fields are encrypted)
+		var encryptedWallets []repository.EncryptedWallet
+		if err := json.Unmarshal(encryptedData, &encryptedWallets); err != nil {
+			log.Fatalf("Error parsing JSON: %v", err)
 		}
 
-		// Parse JSON to validate
-		var wallets []*wallets.Wallet
-		if err := json.Unmarshal([]byte(decrypted), &wallets); err != nil {
-			log.Fatalf("Error parsing decrypted JSON: %v", err)
+		// Decrypt individual fields and convert to Wallet
+		decryptedWallets := make([]*wallets.Wallet, 0, len(encryptedWallets))
+		for _, encWallet := range encryptedWallets {
+			wallet := &wallets.Wallet{
+				Address: encWallet.Address,
+				HDPath:  encWallet.HDPath,
+				Bits:    encWallet.Bits,
+			}
+			wallet.CreatedAt = encWallet.CreatedAt
+			wallet.UpdatedAt = encWallet.UpdatedAt
+
+			// Decrypt PrivateKey if present
+			if encWallet.PrivateKey != "" {
+				decryptedPK, err := encryption.Decrypt(encWallet.PrivateKey, string(password))
+				if err != nil {
+					log.Fatalf("Error decrypting private key: %v", err)
+				}
+				wallet.PrivateKey = decryptedPK
+			}
+
+			// Decrypt Mnemonic if present
+			if encWallet.Mnemonic != "" {
+				decryptedMnemonic, err := encryption.Decrypt(encWallet.Mnemonic, string(password))
+				if err != nil {
+					log.Fatalf("Error decrypting mnemonic: %v", err)
+				}
+				wallet.Mnemonic = decryptedMnemonic
+			}
+
+			decryptedWallets = append(decryptedWallets, wallet)
 		}
 
 		// Create output directory if it doesn't exist
 		outputDir := "output"
 		if err := os.MkdirAll(outputDir, 0750); err != nil {
 			log.Fatalf("Error creating output directory: %v", err)
+		}
+
+		// Convert wallets to JSON (fully decrypted)
+		jsonData, err := json.MarshalIndent(decryptedWallets, "", "  ")
+		if err != nil {
+			log.Fatalf("Error marshaling wallets: %v", err)
 		}
 
 		// Write decrypted JSON to output directory
@@ -108,11 +140,11 @@ func main() {
 			baseName = strings.TrimSuffix(baseName, ".json")
 		}
 		outputFile := filepath.Join(outputDir, baseName+".json")
-		if err := os.WriteFile(outputFile, []byte(decrypted), 0600); err != nil {
+		if err := os.WriteFile(outputFile, jsonData, 0600); err != nil {
 			log.Fatalf("Error writing decrypted file: %v", err)
 		}
 
-		fmt.Printf("Successfully decrypted %d wallets to %s\n", len(wallets), outputFile)
+		fmt.Printf("Successfully decrypted %d wallets to %s\n", len(decryptedWallets), outputFile)
 		return
 	}
 

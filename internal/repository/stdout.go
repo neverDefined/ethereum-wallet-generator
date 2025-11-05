@@ -11,7 +11,22 @@ import (
 	"github.com/planxnx/ethereum-wallet-generator/internal/encryption"
 	"github.com/planxnx/ethereum-wallet-generator/wallets"
 	"golang.org/x/term"
+	"gorm.io/gorm"
 )
+
+// EncryptedWallet is a wallet structure with encrypted sensitive fields for export
+type EncryptedWallet struct {
+	Address      string    `json:"address"`
+	PrivateKey   string    `json:"privateKey,omitempty"`   // Encrypted
+	Mnemonic     string    `json:"mnemonic,omitempty"`     // Encrypted
+	HDPath       string    `json:"hdPath,omitempty"`
+	Bits         int       `json:"bits,omitempty"`
+	CreatedAt    time.Time `json:"createdAt"`
+	UpdatedAt    time.Time `json:"updatedAt"`
+	HasPrivateKey bool      `json:"hasPrivateKey"`          // Indicates if private key exists
+	HasMnemonic   bool      `json:"hasMnemonic"`            // Indicates if mnemonic exists
+	gorm.Model
+}
 
 type InMemoryRepository struct {
 	walletsMu sync.Mutex
@@ -84,23 +99,44 @@ func (r *InMemoryRepository) Close() error {
 		}
 	}()
 
-	// Convert wallets to JSON
-	jsonData, err := json.MarshalIndent(r.wallets, "", "  ")
-	if err != nil {
-		return fmt.Errorf("error marshaling wallets: %w", err)
+	// Convert wallets to encrypted wallet structure
+	encryptedWallets := make([]EncryptedWallet, 0, len(r.wallets))
+	for _, wallet := range r.wallets {
+		encWallet := EncryptedWallet{
+			Address:      wallet.Address,
+			HDPath:       wallet.HDPath,
+			Bits:         wallet.Bits,
+			CreatedAt:    wallet.CreatedAt,
+			UpdatedAt:    wallet.UpdatedAt,
+			HasPrivateKey: wallet.PrivateKey != "",
+			HasMnemonic:   wallet.Mnemonic != "",
+		}
+
+		// Encrypt PrivateKey if present
+		if wallet.PrivateKey != "" {
+			encryptedPK, err := encryption.Encrypt(wallet.PrivateKey, string(password))
+			if err != nil {
+				return fmt.Errorf("error encrypting private key: %w", err)
+			}
+			encWallet.PrivateKey = encryptedPK
+		}
+
+		// Encrypt Mnemonic if present
+		if wallet.Mnemonic != "" {
+			encryptedMnemonic, err := encryption.Encrypt(wallet.Mnemonic, string(password))
+			if err != nil {
+				return fmt.Errorf("error encrypting mnemonic: %w", err)
+			}
+			encWallet.Mnemonic = encryptedMnemonic
+		}
+
+		encryptedWallets = append(encryptedWallets, encWallet)
 	}
 
-	// Zero out JSON data from memory after encryption
-	defer func() {
-		for i := range jsonData {
-			jsonData[i] = 0
-		}
-	}()
-
-	// Encrypt JSON
-	encrypted, err := encryption.Encrypt(string(jsonData), string(password))
+	// Convert to JSON (with Address in plain text, PrivateKey/Mnemonic encrypted)
+	jsonData, err := json.MarshalIndent(encryptedWallets, "", "  ")
 	if err != nil {
-		return fmt.Errorf("error encrypting wallets: %w", err)
+		return fmt.Errorf("error marshaling wallets: %w", err)
 	}
 
 	// Create output directory if it doesn't exist
@@ -109,10 +145,15 @@ func (r *InMemoryRepository) Close() error {
 		return fmt.Errorf("error creating output directory: %w", err)
 	}
 
-	// Write to file in output directory
+	// Write JSON file directly (addresses visible, only PK/mnemonic encrypted)
 	filename := filepath.Join(outputDir, "wallets.encrypted.json")
-	if err := os.WriteFile(filename, []byte(encrypted), 0600); err != nil {
+	if err := os.WriteFile(filename, jsonData, 0600); err != nil {
 		return fmt.Errorf("error writing encrypted file: %w", err)
+	}
+
+	// Zero out JSON data from memory after writing
+	for i := range jsonData {
+		jsonData[i] = 0
 	}
 
 	fmt.Printf("Successfully exported %d wallets to %s\n", len(r.wallets), filename)
