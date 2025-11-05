@@ -16,15 +16,15 @@ import (
 
 // EncryptedWallet is a wallet structure with encrypted sensitive fields for export
 type EncryptedWallet struct {
-	Address      string    `json:"address"`
-	PrivateKey   string    `json:"privateKey,omitempty"`   // Encrypted
-	Mnemonic     string    `json:"mnemonic,omitempty"`     // Encrypted
-	HDPath       string    `json:"hdPath,omitempty"`
-	Bits         int       `json:"bits,omitempty"`
-	CreatedAt    time.Time `json:"createdAt"`
-	UpdatedAt    time.Time `json:"updatedAt"`
-	HasPrivateKey bool      `json:"hasPrivateKey"`          // Indicates if private key exists
-	HasMnemonic   bool      `json:"hasMnemonic"`            // Indicates if mnemonic exists
+	Address       string    `json:"address"`
+	PrivateKey    string    `json:"privateKey,omitempty"` // Encrypted
+	Mnemonic      string    `json:"mnemonic,omitempty"`   // Encrypted
+	HDPath        string    `json:"hdPath,omitempty"`
+	Bits          int       `json:"bits,omitempty"`
+	CreatedAt     time.Time `json:"createdAt"`
+	UpdatedAt     time.Time `json:"updatedAt"`
+	HasPrivateKey bool      `json:"hasPrivateKey"` // Indicates if private key exists
+	HasMnemonic   bool      `json:"hasMnemonic"`   // Indicates if mnemonic exists
 	gorm.Model
 }
 
@@ -58,6 +58,7 @@ func (r *InMemoryRepository) Result() []*wallets.Wallet {
 	return r.wallets
 }
 
+// This is definetly hacky, as it ties main.go and InMemoryRepository together with the password input. But reduces diff a lot.
 func (r *InMemoryRepository) Close() error {
 	defer func() {
 		// Zero out sensitive data from memory
@@ -92,6 +93,35 @@ func (r *InMemoryRepository) Close() error {
 		return fmt.Errorf("password cannot be empty")
 	}
 
+	// Confirm password
+	fmt.Print("Confirm password: ")
+	confirmPassword, err := term.ReadPassword(int(os.Stdin.Fd()))
+	fmt.Println() // newline after password input
+	if err != nil {
+		// Zero out first password before returning
+		for i := range password {
+			password[i] = 0
+		}
+		return fmt.Errorf("error reading password confirmation: %w", err)
+	}
+
+	// Verify passwords match
+	if string(password) != string(confirmPassword) {
+		// Zero out both passwords before returning
+		for i := range password {
+			password[i] = 0
+		}
+		for i := range confirmPassword {
+			confirmPassword[i] = 0
+		}
+		return fmt.Errorf("passwords do not match")
+	}
+
+	// Zero out confirm password from memory
+	for i := range confirmPassword {
+		confirmPassword[i] = 0
+	}
+
 	// Zero out password from memory after use
 	defer func() {
 		for i := range password {
@@ -103,11 +133,11 @@ func (r *InMemoryRepository) Close() error {
 	encryptedWallets := make([]EncryptedWallet, 0, len(r.wallets))
 	for _, wallet := range r.wallets {
 		encWallet := EncryptedWallet{
-			Address:      wallet.Address,
-			HDPath:       wallet.HDPath,
-			Bits:         wallet.Bits,
-			CreatedAt:    wallet.CreatedAt,
-			UpdatedAt:    wallet.UpdatedAt,
+			Address:       wallet.Address,
+			HDPath:        wallet.HDPath,
+			Bits:          wallet.Bits,
+			CreatedAt:     wallet.CreatedAt,
+			UpdatedAt:     wallet.UpdatedAt,
 			HasPrivateKey: wallet.PrivateKey != "",
 			HasMnemonic:   wallet.Mnemonic != "",
 		}
