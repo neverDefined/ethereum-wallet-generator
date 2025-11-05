@@ -2,19 +2,23 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"syscall"
 
 	"github.com/glebarez/sqlite"
+	"golang.org/x/term"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 
+	"github.com/planxnx/ethereum-wallet-generator/internal/encryption"
 	"github.com/planxnx/ethereum-wallet-generator/internal/generators"
 	"github.com/planxnx/ethereum-wallet-generator/internal/progressbar"
 	"github.com/planxnx/ethereum-wallet-generator/internal/repository"
@@ -44,6 +48,7 @@ func main() {
 	fmt.Println(" ")
 
 	// Parse flags
+	decryptFile := flag.String("decrypt", "", "decrypt encrypted JSON file (e.g., wallets.encrypted.json)")
 	number := flag.Int("n", 10, "set number of generate times (not number of result wallets) (set number to -1 for Infinite loop ∞)")
 	limit := flag.Int("limit", 0, "set limit number of result wallets. stop generate when result of vanity wallets reach the limit (set number to 0 for no limit)")
 	dbPath := flag.String("db", "", "set sqlite output name eg. wallets.db (db file will create in /db)")
@@ -58,6 +63,58 @@ func main() {
 	isCompatible := flag.Bool("compatible", false, "logging compatible mode (turn this on to fix logging glitch)")
 	mode := flag.Int("mode", 1, "wallet generate mode [1: normal mode, 2: only private key mode(generate only privatekey, this fastest mode)]")
 	flag.Parse()
+
+	// Handle decrypt command
+	if *decryptFile != "" {
+		// Read encrypted file
+		encryptedData, err := os.ReadFile(*decryptFile)
+		if err != nil {
+			log.Fatalf("Error reading encrypted file: %v", err)
+		}
+
+		// Prompt for password
+		fmt.Print("Enter password to decrypt: ")
+		password, err := term.ReadPassword(int(os.Stdin.Fd()))
+		fmt.Println() // newline after password input
+		if err != nil {
+			log.Fatalf("Error reading password: %v", err)
+		}
+		if len(password) == 0 {
+			log.Fatal("Error: password cannot be empty")
+		}
+
+		// Decrypt
+		decrypted, err := encryption.Decrypt(string(encryptedData), string(password))
+		if err != nil {
+			log.Fatalf("Error decrypting file: %v", err)
+		}
+
+		// Parse JSON to validate
+		var wallets []*wallets.Wallet
+		if err := json.Unmarshal([]byte(decrypted), &wallets); err != nil {
+			log.Fatalf("Error parsing decrypted JSON: %v", err)
+		}
+
+		// Create output directory if it doesn't exist
+		outputDir := "output"
+		if err := os.MkdirAll(outputDir, 0750); err != nil {
+			log.Fatalf("Error creating output directory: %v", err)
+		}
+
+		// Write decrypted JSON to output directory
+		baseName := strings.TrimSuffix(filepath.Base(*decryptFile), ".encrypted.json")
+		if baseName == filepath.Base(*decryptFile) {
+			// If it doesn't have .encrypted.json suffix, just add .json
+			baseName = strings.TrimSuffix(baseName, ".json")
+		}
+		outputFile := filepath.Join(outputDir, baseName+".json")
+		if err := os.WriteFile(outputFile, []byte(decrypted), 0600); err != nil {
+			log.Fatalf("Error writing decrypted file: %v", err)
+		}
+
+		fmt.Printf("Successfully decrypted %d wallets to %s\n", len(wallets), outputFile)
+		return
+	}
 
 	// Wallet Address Validator
 	r, err := regexp.Compile(*regEx)

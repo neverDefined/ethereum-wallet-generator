@@ -19,5 +19,8 @@ test
 *.db
 *.csv
 
+# Output directory
+/output/
+
 /volume*
 
